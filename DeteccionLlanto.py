@@ -341,6 +341,172 @@ for text in disp.text_.ravel():
 plt.show()
 
 
+#%% Ahora con MFCC
 
 
 
+#%%  Red para espectro
+
+# Data Augmentation
+
+import tensorflow as tf
+
+
+# Normalización de las imágenes y Data Augmentation
+data_augmentation = tf.keras.Sequential([
+    RandomFlip("horizontal_and_vertical"),
+    RandomRotation(0.2),
+    RandomZoom(0.2)
+])
+
+# Aplicar augmentations y normalización
+train_ds = train_ds_m.map(lambda x, y: (data_augmentation(x, training=True), y))
+normalization_layer = Rescaling(1./255)
+train_ds = train_ds.map(lambda x, y: (normalization_layer(x), y))
+val_ds = val_ds_m.map(lambda x, y: (normalization_layer(x), y))
+
+# Optimización del pipeline de datos
+AUTOTUNE = tf.data.AUTOTUNE
+train_ds = train_ds.cache().prefetch(buffer_size=AUTOTUNE)
+val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
+
+
+#%% Creación del modelo 
+
+# Definir el modelo
+model = tf.keras.Sequential([
+    tf.keras.layers.Conv2D(32, (5, 5), activation='relu', padding='same', 
+                           input_shape=(img_height, img_width, 3),
+                           kernel_regularizer=tf.keras.regularizers.l2(1e-4)),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.MaxPooling2D((2, 2)),
+    
+    tf.keras.layers.Conv2D(64, (5, 5), padding='same', activation='relu',
+                           kernel_regularizer=tf.keras.regularizers.l2(1e-4)),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.MaxPooling2D((2, 2)),
+    
+    tf.keras.layers.Conv2D(128, (5, 5), padding='same', activation='relu',
+                           kernel_regularizer=tf.keras.regularizers.l2(1e-4)),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.MaxPooling2D((2, 2)),
+    
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(1e-4)),
+    tf.keras.layers.Dropout(0.5),
+    tf.keras.layers.Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(1e-4)),
+    tf.keras.layers.Dropout(0.5),
+    tf.keras.layers.Dense(64, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(1e-4)),
+    tf.keras.layers.Dense(30, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(1e-4)),
+    tf.keras.layers.Dropout(0.3),
+    tf.keras.layers.Dense(2, activation='softmax')
+])
+
+# Compilar el modelo con un learning rate más bajo
+model.compile(
+    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+    loss='binary_crossentropy',
+    metrics=['accuracy']
+)
+
+# Configurar callbacks
+learning_rate_reduction = ReduceLROnPlateau(monitor='val_accuracy', 
+                                            patience=5, 
+                                            verbose=1, 
+                                            factor=0.5, 
+                                            min_lr=1e-7)
+
+#early_stopping = EarlyStopping(monitor='val_accuracy', patience=10, restore_best_weights=True)
+
+# Entrenar el modelo
+history = model.fit(
+    train_ds,
+    validation_data=val_ds,
+    epochs=50,
+#    callbacks=[learning_rate_reduction, early_stopping]
+    callbacks = [learning_rate_reduction]
+)
+
+
+#%%  Guardado y carga del modelo 
+
+# Gurdado
+model.save("D:\Magister\Aplicaciones con IA\DeteccionLLanto/Deteccionllanto_m.h5")
+#model.summary()
+ 
+# Carga 
+#model = tf.keras.models.load_model('D:\Magister\Aplicaciones con IA\DeteccionLLanto/Deteccionllanto_s.h5')
+
+#%% Metricas
+# Visualización del desempeño (costo y precisión)
+plt.figure(figsize=(20, 15)) 
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.ylabel('Costo', fontsize = 34)
+plt.xlabel('Epoca', fontsize = 34)
+plt.xticks(fontsize = 26)
+plt.yticks(fontsize = 26)
+plt.legend(['Entrenamiento', 'Validación'], loc='upper right', fontsize = 30)
+plt.grid(True)
+plt.show()
+
+
+plt.figure(figsize=(20, 15)) 
+plt.plot(history.history['accuracy'])
+plt.plot(history.history['val_accuracy'])
+plt.ylabel('Precisión', fontsize = 34)
+plt.xlabel('Epoca', fontsize = 34)
+plt.xticks(fontsize = 26)
+plt.yticks(fontsize = 26)
+plt.legend(['Entrenamiento', 'Validación'], loc='lower right', fontsize = 30)
+plt.grid(True)
+plt.show()
+
+#%% Realizo predicciones sobre los datos de test_s
+
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+
+# Crear un generador para las imágenes de prueba
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+test_generator = test_datagen.flow_from_directory(
+    path_test_m,
+    target_size=(img_height, img_width),  
+    batch_size=32,
+    class_mode='categorical',  
+    shuffle=False  # Importante para no mezclar las imágenes en la evaluación
+)
+
+
+loss, accuracy = model.evaluate(test_generator)
+print(f'Pérdida: {loss}')
+print(f'Precisión: {accuracy}')
+
+
+predictions = model.predict(test_generator)
+predicted_classes = np.argmax(predictions, axis=1)
+
+
+class_labels = list(test_generator.class_indices.keys())
+
+#%% Confusión matrix
+true_classes = test_generator.classes
+cm = confusion_matrix(true_classes, predicted_classes)
+
+#%% Configurar matriz de confusión
+plt.figure(figsize=(18, 14))  # Ajustar el tamaño de la figura
+ESP = ['babycry', 'others']
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels = ESP)
+disp.plot(cmap=plt.cm.Blues, ax=plt.gca(), values_format='d')
+
+plt.title('Matriz de Confusión CNN MFCC', fontsize=40)  
+plt.xlabel('Clase Predicha', fontsize=24)      
+plt.ylabel('Clase Verdadera', fontsize=24)     
+plt.xticks(fontsize=30)                        
+plt.yticks(fontsize=30)                        
+# Ajustar el tamaño de la fuente de los números dentro de la matriz
+for text in disp.text_.ravel():
+    text.set_fontsize(40)
+
+plt.show()
