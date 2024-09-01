@@ -435,7 +435,7 @@ model.save("D:\Magister\Aplicaciones con IA\DeteccionLLanto/Deteccionllanto_m.h5
 #model.summary()
  
 # Carga 
-#model = tf.keras.models.load_model('D:\Magister\Aplicaciones con IA\DeteccionLLanto/Deteccionllanto_s.h5')
+#model = tf.keras.models.load_model('D:\Magister\Aplicaciones con IA\DeteccionLLanto/Deteccionllanto_m.h5')
 
 #%% Metricas
 # Visualización del desempeño (costo y precisión)
@@ -462,7 +462,7 @@ plt.legend(['Entrenamiento', 'Validación'], loc='lower right', fontsize = 30)
 plt.grid(True)
 plt.show()
 
-#%% Realizo predicciones sobre los datos de test_s
+#%% Realizo predicciones sobre los datos de test_m
 
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
@@ -510,3 +510,4 @@ for text in disp.text_.ravel():
     text.set_fontsize(40)
 
 plt.show()
+
