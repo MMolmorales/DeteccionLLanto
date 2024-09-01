@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Aug 31 20:47:16 2024
 
 @author: mirko
 """
